@@ -2,23 +2,38 @@ from __future__ import annotations
 
 import random
 from collections import defaultdict
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from .generator import generate_question
 from .student_model import calculate_accuracy
 
 
-def _bucket_skills(student: Dict[str, Any], skills: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+def _bucket_skills(
+    student: Dict[str, Any],
+    skills: List[Dict[str, Any]],
+    focus_skills: Optional[List[str]] = None,
+) -> Dict[str, List[Dict[str, Any]]]:
     year = student.get("student_year", 0)
     weakest = []
     current = []
     stretch = []
+    focused = []
+
+    focus_lookup = {name.lower() for name in (focus_skills or [])}
 
     for skill in skills:
         expected_year = int(skill["expected_year"])
         accuracy = calculate_accuracy(student, skill["skill_id"])
         skill_with_accuracy = dict(skill)
         skill_with_accuracy["accuracy"] = accuracy
+
+        is_focus_skill = (
+            skill_with_accuracy["skill_name"].lower() in focus_lookup
+            or skill_with_accuracy["skill_id"].lower() in focus_lookup
+        )
+
+        if is_focus_skill:
+            focused.append(skill_with_accuracy)
 
         if accuracy < 0.7 and expected_year <= year:
             weakest.append(skill_with_accuracy)
@@ -32,7 +47,8 @@ def _bucket_skills(student: Dict[str, Any], skills: List[Dict[str, Any]]) -> Dic
     weakest.sort(key=lambda s: s["accuracy"])
     current.sort(key=lambda s: s["difficulty_level"])
     stretch.sort(key=lambda s: (s["expected_year"], s["difficulty_level"]))
-    return {"weakest": weakest, "current": current, "stretch": stretch}
+    focused.sort(key=lambda s: s["accuracy"])
+    return {"focused": focused, "weakest": weakest, "current": current, "stretch": stretch}
 
 
 def _choose_templates_for_skill(
@@ -50,27 +66,43 @@ def generate_worksheet(
     templates: List[Dict[str, Any]],
     question_count: int = 25,
     seed: int = 42,
+    focus_skills: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     if question_count < 20 or question_count > 30:
         raise ValueError("question_count must be between 20 and 30")
 
     rng = random.Random(seed)
-    buckets = _bucket_skills(student, skills)
+    buckets = _bucket_skills(student, skills, focus_skills=focus_skills)
 
-    targets = {
-        "weakest": max(1, round(question_count * 0.6)),
-        "current": max(1, round(question_count * 0.3)),
-    }
-    targets["stretch"] = question_count - targets["weakest"] - targets["current"]
+    if focus_skills:
+        targets = {
+            "focused": max(1, round(question_count * 0.5)),
+            "weakest": max(1, round(question_count * 0.3)),
+            "current": max(1, round(question_count * 0.15)),
+        }
+        targets["stretch"] = question_count - targets["focused"] - targets["weakest"] - targets["current"]
+    else:
+        targets = {
+            "weakest": max(1, round(question_count * 0.6)),
+            "current": max(1, round(question_count * 0.3)),
+        }
+        targets["stretch"] = question_count - targets["weakest"] - targets["current"]
 
     templates_by_skill: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for template in templates:
         templates_by_skill[template["skill_id"]].append(template)
 
     worksheet: List[Dict[str, Any]] = []
-    for bucket_name in ("weakest", "current", "stretch"):
-        skill_pool = buckets[bucket_name] or buckets["current"] or buckets["weakest"] or skills
-        for _ in range(targets[bucket_name]):
+    ordered_buckets = ["focused", "weakest", "current", "stretch"] if focus_skills else ["weakest", "current", "stretch"]
+
+    for bucket_name in ordered_buckets:
+        skill_pool = (
+            buckets.get(bucket_name, [])
+            or buckets["current"]
+            or buckets["weakest"]
+            or skills
+        )
+        for _ in range(targets.get(bucket_name, 0)):
             skill = rng.choice(skill_pool)
             template = _choose_templates_for_skill(skill["skill_id"], templates_by_skill, rng)
             worksheet.append(generate_question(template, rng=rng))
