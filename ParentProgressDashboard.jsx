@@ -1,354 +1,289 @@
 import React from "react";
 
-const STATUS_STYLES = {
-  onTrack: { label: "On Track", color: "#166534", bg: "#dcfce7" },
-  developing: { label: "Developing", color: "#92400e", bg: "#fef3c7" },
-  needsSupport: { label: "Needs Support", color: "#991b1b", bg: "#fee2e2" }
-};
-
-const clamp = (value, min = 0, max = 100) => Math.max(min, Math.min(max, value));
-
-function Header({ studentName, yearLevel, reportDate }) {
+function HeroSection({ onStartAssessment }) {
   return (
-    <header style={styles.header}>
-      <div>
-        <h1 style={styles.title}>Student Progress Report</h1>
-        <p style={styles.subtitle}>Parent dashboard view</p>
-      </div>
-      <div style={styles.headerMeta}>
-        <p style={styles.metaLine}><strong>Student:</strong> {studentName}</p>
-        <p style={styles.metaLine}><strong>Year:</strong> {yearLevel}</p>
-        <p style={styles.metaLine}><strong>Report date:</strong> {reportDate}</p>
-      </div>
-    </header>
-  );
-}
-
-function ProgressOverview({ strandProgress }) {
-  return (
-    <section style={styles.card}>
-      <h2 style={styles.sectionTitle}>Progress Overview</h2>
-      <div style={styles.stack}>
-        {strandProgress.map((strand) => {
-          const progress = clamp(strand.progress);
-          return (
-            <div key={strand.name}>
-              <div style={styles.rowBetween}>
-                <span style={styles.rowLabel}>{strand.name}</span>
-                <span style={styles.rowValue}>{progress}%</span>
-              </div>
-              <div style={styles.track}>
-                <div style={{ ...styles.fill, width: `${progress}%` }} />
-              </div>
-            </div>
-          );
-        })}
+    <section id="hero" className="section hero">
+      <div className="heroContent">
+        <p className="eyebrow">Primary Maths Confidence</p>
+        <h1>Find out if your child is falling behind in maths — in 2 minutes</h1>
+        <p>
+          Get clear answers fast with a parent-friendly diagnostic that highlights exactly
+          where your child needs support before small gaps become major setbacks.
+        </p>
+        <button className="ctaButton" onClick={onStartAssessment}>
+          Start Free Assessment
+        </button>
       </div>
     </section>
   );
 }
 
-function GapAlert({ gapSummary }) {
+function ProblemSection() {
   return (
-    <section style={{ ...styles.card, ...styles.alertCard }}>
-      <h2 style={styles.sectionTitle}>Gap Alert</h2>
-      <p style={styles.alertText}>{gapSummary.summary}</p>
-      <ul style={styles.ul}>
-        {gapSummary.majorGaps.map((gap) => (
-          <li key={gap}>{gap}</li>
+    <section id="problem" className="section">
+      <h2>Small maths gaps don&apos;t stay small</h2>
+      <p>
+        In primary school, each new topic builds on earlier skills. When a child misses one core
+        concept, the next lesson becomes harder, confidence drops, and progress slows.
+      </p>
+      <p>
+        A weak foundation in multiplication today can become struggles with fractions,
+        word problems, and algebra tomorrow. Early clarity gives you the power to act now.
+      </p>
+    </section>
+  );
+}
+
+function SolutionSection() {
+  const steps = [
+    {
+      title: "1) Assessment",
+      description: "Your child completes a short, adaptive maths check in about 2 minutes."
+    },
+    {
+      title: "2) Report",
+      description: "You receive a simple diagnostic report showing strengths and urgent learning gaps."
+    },
+    {
+      title: "3) Personalised plan",
+      description: "Get a week-by-week action plan tailored to your child&apos;s exact needs."
+    }
+  ];
+
+  return (
+    <section id="solution" className="section">
+      <h2>How it works</h2>
+      <div className="threeColGrid">
+        {steps.map((step) => (
+          <article key={step.title} className="card">
+            <h3>{step.title}</h3>
+            <p>{step.description}</p>
+          </article>
         ))}
-      </ul>
-    </section>
-  );
-}
-
-function SkillBreakdown({ skills }) {
-  return (
-    <section style={styles.card}>
-      <h2 style={styles.sectionTitle}>Skill Breakdown</h2>
-      <div style={styles.stack}>
-        {skills.map((skill) => {
-          const statusStyle = STATUS_STYLES[skill.status] || STATUS_STYLES.developing;
-          return (
-            <div key={skill.name} style={styles.skillRow}>
-              <div>
-                <p style={styles.skillName}>{skill.name}</p>
-                <p style={styles.skillNote}>Mastery: {clamp(skill.mastery)}%</p>
-              </div>
-              <span
-                style={{
-                  ...styles.badge,
-                  backgroundColor: statusStyle.bg,
-                  color: statusStyle.color
-                }}
-              >
-                {statusStyle.label}
-              </span>
-            </div>
-          );
-        })}
       </div>
     </section>
   );
 }
 
-function ActionPlan({ recommendedPlan }) {
+function ExampleReportSection() {
   return (
-    <section style={styles.card}>
-      <h2 style={styles.sectionTitle}>Recommended Action Plan</h2>
-      <ol style={styles.ol}>
-        {recommendedPlan.map((step) => (
-          <li key={step}>{step}</li>
-        ))}
-      </ol>
+    <section id="report" className="section highlight">
+      <h2>Example parent insight</h2>
+      <div className="reportBox">
+        <p className="reportLabel">Sample finding</p>
+        <p className="reportInsight">1.5 years behind in multiplication</p>
+        <p>
+          We translate assessment results into plain English so you instantly understand the academic
+          risk level and what to do next.
+        </p>
+      </div>
     </section>
   );
 }
 
-function WorksheetPreview({ worksheetPreview }) {
+function ProductPreviewSection() {
   return (
-    <section style={styles.card}>
-      <h2 style={styles.sectionTitle}>Worksheet Preview</h2>
-      <p style={styles.metaLine}><strong>Title:</strong> {worksheetPreview.title}</p>
-      <p style={styles.metaLine}><strong>Focus:</strong> {worksheetPreview.focus}</p>
-      <ul style={styles.ul}>
-        {worksheetPreview.sampleQuestions.map((question) => (
-          <li key={question}>{question}</li>
-        ))}
-      </ul>
+    <section id="preview" className="section">
+      <h2>What your child gets after the report</h2>
+      <div className="twoColGrid">
+        <article className="card">
+          <h3>Targeted worksheets</h3>
+          <p>
+            Practice sheets focus on the exact skills your child is missing, so every minute of study
+            moves them forward.
+          </p>
+        </article>
+        <article className="card">
+          <h3>Adaptive learning path</h3>
+          <p>
+            As your child improves, the platform updates difficulty automatically to keep challenge high
+            and frustration low.
+          </p>
+        </article>
+      </div>
     </section>
   );
 }
 
-function CTASection({ ctaLabel, onCtaClick }) {
+function PricingSection({ onStartAssessment }) {
   return (
-    <section style={styles.card}>
-      <button style={styles.ctaButton} onClick={onCtaClick}>
-        {ctaLabel}
+    <section id="pricing" className="section">
+      <h2>Simple pricing for every family</h2>
+      <div className="twoColGrid">
+        <article className="card pricingCard">
+          <h3>Free</h3>
+          <p className="price">$0</p>
+          <ul>
+            <li>2-minute diagnostic assessment</li>
+            <li>Gap snapshot for key maths strands</li>
+            <li>One sample worksheet</li>
+          </ul>
+          <button className="secondaryButton" onClick={onStartAssessment}>
+            Start Free Assessment
+          </button>
+        </article>
+        <article className="card pricingCard premium">
+          <h3>Premium</h3>
+          <p className="price">$19/month</p>
+          <ul>
+            <li>Full personalised report</li>
+            <li>Weekly adaptive worksheets</li>
+            <li>Progress tracking and parent guidance</li>
+          </ul>
+          <button className="ctaButton" onClick={onStartAssessment}>
+            Start Free Assessment
+          </button>
+        </article>
+      </div>
+    </section>
+  );
+}
+
+function FinalCTASection({ onStartAssessment }) {
+  return (
+    <section id="final-cta" className="section finalCta">
+      <h2>Every week you wait makes catching up harder.</h2>
+      <p>
+        Start the free assessment today and get immediate clarity on your child&apos;s maths progress
+        before the next school term compounds the gap.
+      </p>
+      <button className="ctaButton" onClick={onStartAssessment}>
+        Start Free Assessment
       </button>
     </section>
   );
 }
 
-export function ParentProgressDashboard({ report }) {
-  const isMobile =
-    typeof window !== "undefined" ? window.matchMedia("(max-width: 768px)").matches : false;
+export function MathsLandingPage() {
+  const startAssessment = () => {
+    if (typeof window !== "undefined") {
+      const pricing = document.getElementById("pricing");
+      if (pricing) {
+        pricing.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+
+    // Placeholder functional hook for future checkout or quiz routing.
+    console.log("startAssessment() triggered");
+  };
 
   return (
-    <main style={styles.page}>
-      <div style={styles.container}>
-        <Header
-          studentName={report.studentName}
-          yearLevel={report.yearLevel}
-          reportDate={report.reportDate}
-        />
+    <main className="pageRoot">
+      <style>{`
+        * { box-sizing: border-box; }
+        html, body, #root { margin: 0; padding: 0; }
+        .pageRoot {
+          font-family: Arial, sans-serif;
+          color: #0f172a;
+          background: #f8fafc;
+          scroll-behavior: smooth;
+          line-height: 1.5;
+        }
+        .section {
+          max-width: 980px;
+          margin: 0 auto;
+          padding: 64px 20px;
+        }
+        .hero {
+          padding-top: 80px;
+          text-align: center;
+        }
+        .heroContent {
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 16px;
+          padding: 48px 24px;
+        }
+        h1, h2, h3 { margin-top: 0; }
+        h1 { font-size: 2rem; margin-bottom: 16px; }
+        h2 { font-size: 1.65rem; margin-bottom: 12px; }
+        h3 { font-size: 1.1rem; margin-bottom: 8px; }
+        p { margin: 0 0 12px; }
+        .eyebrow {
+          text-transform: uppercase;
+          font-size: 0.8rem;
+          letter-spacing: 0.08em;
+          color: #2563eb;
+          font-weight: 700;
+        }
+        .threeColGrid, .twoColGrid {
+          display: grid;
+          gap: 16px;
+        }
+        .threeColGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .twoColGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .card {
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 12px;
+          padding: 20px;
+        }
+        .highlight .reportBox {
+          background: #fff7ed;
+          border: 1px solid #fed7aa;
+          border-radius: 12px;
+          padding: 20px;
+        }
+        .reportLabel {
+          font-size: 0.85rem;
+          color: #9a3412;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          font-weight: 700;
+          margin-bottom: 8px;
+        }
+        .reportInsight {
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: #7c2d12;
+          margin-bottom: 10px;
+        }
+        ul { margin: 0 0 18px 18px; padding: 0; }
+        .price {
+          font-size: 1.8rem;
+          font-weight: 700;
+          margin-bottom: 10px;
+        }
+        .premium {
+          border-color: #93c5fd;
+          background: #eff6ff;
+        }
+        .ctaButton, .secondaryButton {
+          border: none;
+          border-radius: 10px;
+          padding: 12px 18px;
+          font-size: 1rem;
+          font-weight: 700;
+          cursor: pointer;
+          width: 100%;
+          transition: opacity 0.2s ease;
+        }
+        .ctaButton { background: #2563eb; color: #ffffff; }
+        .secondaryButton { background: #e2e8f0; color: #0f172a; }
+        .ctaButton:hover, .secondaryButton:hover { opacity: 0.9; }
+        .finalCta {
+          text-align: center;
+          padding-bottom: 80px;
+        }
 
-        <div
-          style={{
-            ...styles.grid,
-            gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr"
-          }}
-        >
-          <ProgressOverview strandProgress={report.strandProgress} />
-          <GapAlert gapSummary={report.gapSummary} />
-          <SkillBreakdown skills={report.skillBreakdown} />
-          <ActionPlan recommendedPlan={report.actionPlan} />
-          <WorksheetPreview worksheetPreview={report.worksheetPreview} />
-          <CTASection
-            ctaLabel={report.cta.label}
-            onCtaClick={report.cta.onClick}
-          />
-        </div>
-      </div>
+        @media (max-width: 768px) {
+          .section { padding: 48px 16px; }
+          h1 { font-size: 1.6rem; }
+          h2 { font-size: 1.35rem; }
+          .threeColGrid, .twoColGrid { grid-template-columns: 1fr; }
+          .heroContent { padding: 32px 18px; }
+        }
+      `}</style>
+
+      <HeroSection onStartAssessment={startAssessment} />
+      <ProblemSection />
+      <SolutionSection />
+      <ExampleReportSection />
+      <ProductPreviewSection />
+      <PricingSection onStartAssessment={startAssessment} />
+      <FinalCTASection onStartAssessment={startAssessment} />
     </main>
   );
 }
 
-export const mockReport = {
-  studentName: "Maya Johnson",
-  yearLevel: "Year 4",
-  reportDate: "April 7, 2026",
-  strandProgress: [
-    { name: "Number & Algebra", progress: 78 },
-    { name: "Measurement & Geometry", progress: 62 },
-    { name: "Statistics & Probability", progress: 71 }
-  ],
-  gapSummary: {
-    summary:
-      "Maya is progressing well overall, with the largest learning gaps in fractions and multi-step problem solving.",
-    majorGaps: [
-      "Equivalent fractions and ordering fractions",
-      "Selecting operations in two-step word problems",
-      "Converting perimeter understanding into area strategy"
-    ]
-  },
-  skillBreakdown: [
-    { name: "Place value to 10,000", mastery: 86, status: "onTrack" },
-    { name: "Equivalent fractions", mastery: 49, status: "needsSupport" },
-    { name: "Perimeter vs area", mastery: 57, status: "developing" },
-    { name: "Interpreting bar graphs", mastery: 82, status: "onTrack" }
-  ],
-  actionPlan: [
-    "Complete two short fraction fluency sessions each week (10–12 minutes each).",
-    "Use visual models (fraction strips/circles) before symbolic fraction comparison.",
-    "Practice one multi-step word problem nightly and explain the chosen operations aloud.",
-    "Review teacher feedback every Friday and set one micro-goal for the following week."
-  ],
-  worksheetPreview: {
-    title: "Fractions Foundations Pack",
-    focus: "Equivalent fractions, comparison, and visual reasoning",
-    sampleQuestions: [
-      "Circle all fractions equivalent to 3/4: 6/8, 9/12, 12/18, 15/20.",
-      "Order these fractions from least to greatest: 2/3, 5/6, 3/4.",
-      "Shade a model to show 4/8 and explain why it equals 1/2."
-    ]
-  },
-  cta: {
-    label: "Unlock Maya's Personalized Worksheet Plan",
-    onClick: () => alert("CTA clicked: proceed to worksheet checkout")
-  }
-};
-
-export function ExampleUsage() {
-  return <ParentProgressDashboard report={mockReport} />;
-}
-
-const styles = {
-  page: {
-    minHeight: "100vh",
-    backgroundColor: "#f8fafc",
-    padding: "20px"
-  },
-  container: {
-    maxWidth: "1040px",
-    margin: "0 auto",
-    display: "flex",
-    flexDirection: "column",
-    gap: "16px"
-  },
-  header: {
-    backgroundColor: "#ffffff",
-    border: "1px solid #e2e8f0",
-    borderRadius: "12px",
-    padding: "16px",
-    display: "flex",
-    justifyContent: "space-between",
-    gap: "16px",
-    flexWrap: "wrap"
-  },
-  headerMeta: {
-    minWidth: "220px"
-  },
-  title: {
-    margin: 0,
-    fontSize: "1.4rem",
-    color: "#0f172a"
-  },
-  subtitle: {
-    margin: "4px 0 0 0",
-    color: "#475569"
-  },
-  metaLine: {
-    margin: "4px 0",
-    color: "#334155"
-  },
-  grid: {
-    display: "grid",
-    gap: "16px"
-  },
-  card: {
-    backgroundColor: "#ffffff",
-    border: "1px solid #e2e8f0",
-    borderRadius: "12px",
-    padding: "16px"
-  },
-  alertCard: {
-    border: "1px solid #fecaca",
-    backgroundColor: "#fff7ed"
-  },
-  sectionTitle: {
-    margin: "0 0 12px 0",
-    color: "#0f172a",
-    fontSize: "1rem"
-  },
-  stack: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "12px"
-  },
-  rowBetween: {
-    display: "flex",
-    justifyContent: "space-between",
-    marginBottom: "4px"
-  },
-  rowLabel: {
-    color: "#1e293b",
-    fontWeight: 500
-  },
-  rowValue: {
-    color: "#334155",
-    fontWeight: 600
-  },
-  track: {
-    width: "100%",
-    height: "10px",
-    backgroundColor: "#e2e8f0",
-    borderRadius: "9999px",
-    overflow: "hidden"
-  },
-  fill: {
-    height: "100%",
-    backgroundColor: "#2563eb",
-    borderRadius: "9999px"
-  },
-  alertText: {
-    margin: "0 0 8px 0",
-    color: "#7f1d1d"
-  },
-  ul: {
-    margin: "0 0 0 18px",
-    color: "#334155",
-    padding: 0
-  },
-  ol: {
-    margin: "0 0 0 18px",
-    color: "#334155",
-    padding: 0
-  },
-  skillRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    gap: "12px",
-    alignItems: "flex-start",
-    borderBottom: "1px solid #f1f5f9",
-    paddingBottom: "10px"
-  },
-  skillName: {
-    margin: 0,
-    color: "#0f172a",
-    fontWeight: 600
-  },
-  skillNote: {
-    margin: "4px 0 0 0",
-    color: "#64748b",
-    fontSize: "0.9rem"
-  },
-  badge: {
-    fontSize: "0.75rem",
-    fontWeight: 700,
-    borderRadius: "9999px",
-    padding: "4px 10px",
-    whiteSpace: "nowrap"
-  },
-  ctaButton: {
-    width: "100%",
-    border: "none",
-    backgroundColor: "#2563eb",
-    color: "#ffffff",
-    padding: "12px 14px",
-    borderRadius: "10px",
-    fontSize: "1rem",
-    fontWeight: 700,
-    cursor: "pointer"
-  }
-};
+export default MathsLandingPage;
