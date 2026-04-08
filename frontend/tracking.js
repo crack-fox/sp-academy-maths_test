@@ -1,8 +1,8 @@
 const API_ENDPOINT = '/api/events';
-const SESSION_KEY = 'sp_math_session_id';
+const SESSION_KEY = 'session_id';
 const MAX_RETRIES = 3;
 
-export function getOrCreateSessionId() {
+export function getSessionId() {
   const existing = window.localStorage.getItem(SESSION_KEY);
   if (existing) return existing;
 
@@ -38,31 +38,34 @@ async function postEvent(payload, attempt = 0) {
 }
 
 export function trackEvent(eventName, metadata = {}, context = {}) {
+  const sessionId = getSessionId();
+  const studentId = context.studentId ?? metadata.student_id ?? 'anonymous_student';
+
   const payload = {
     event_id: crypto.randomUUID(),
-    session_id: getOrCreateSessionId(),
+    session_id: sessionId,
     user_id: context.userId ?? null,
-    student_id: context.studentId ?? 'anonymous_student',
+    student_id: studentId,
     event_name: eventName,
     timestamp: new Date().toISOString(),
-    metadata,
+    metadata: {
+      ...metadata,
+      session_id: sessionId,
+      student_id: studentId,
+    },
   };
 
-  // Non-blocking fire-and-forget.
   void postEvent(payload);
 }
 
-/* Example usage in React:
-import { trackEvent } from './tracking';
-
-trackEvent('start_assessment', {
-  device: 'desktop',
-  stage: 'diagnostic',
-  score: 0,
-  total: 0,
-  xp: 0,
-}, {
-  userId: 'user_123',
-  studentId: 'Raphael',
-});
-*/
+export function trackQuizCompletion({ score, total, xp }, context = {}) {
+  trackEvent(
+    'complete_assessment',
+    {
+      score,
+      total,
+      xp,
+    },
+    context,
+  );
+}

@@ -94,3 +94,18 @@ CREATE TABLE IF NOT EXISTS student_stats (
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
 );
+
+
+CREATE TABLE IF NOT EXISTS events (
+  event_id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  user_id TEXT,
+  student_id TEXT NOT NULL,
+  event_name TEXT NOT NULL,
+  metadata TEXT NOT NULL,
+  timestamp TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_events_session_student ON events(session_id, student_id);
+CREATE INDEX IF NOT EXISTS idx_events_user ON events(user_id);
+

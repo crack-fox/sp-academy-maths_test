@@ -26,6 +26,42 @@ def db_conn():
     return conn
 
 
+def get_student_stats(conn, session_id: str, student_id: str):
+    if not session_id or not student_id:
+        return {
+            "total_xp": 0,
+            "total_questions": 0,
+            "correct_answers": 0,
+            "accuracy": 0.0,
+        }
+
+    row = conn.execute(
+        """
+        SELECT
+          COALESCE(SUM(CAST(json_extract(metadata, '$.xp') AS REAL)), 0) AS total_xp,
+          COALESCE(SUM(CAST(json_extract(metadata, '$.total') AS REAL)), 0) AS total_questions,
+          COALESCE(SUM(CAST(json_extract(metadata, '$.score') AS REAL)), 0) AS correct_answers
+        FROM events
+        WHERE session_id = ?
+          AND student_id = ?
+          AND event_name IN ('question_answered', 'complete_assessment')
+        """,
+        (session_id, student_id),
+    ).fetchone()
+
+    total_xp = int(round(float(row["total_xp"] or 0)))
+    total_questions = int(round(float(row["total_questions"] or 0)))
+    correct_answers = int(round(float(row["correct_answers"] or 0)))
+    accuracy = round(correct_answers / total_questions, 4) if total_questions else 0.0
+
+    return {
+        "total_xp": total_xp,
+        "total_questions": total_questions,
+        "correct_answers": correct_answers,
+        "accuracy": accuracy,
+    }
+
+
 def init_db():
     conn = db_conn()
     with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
@@ -86,6 +122,21 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         conn = db_conn()
         try:
+            if parsed.path == "/api/student-stats":
+                q = parse_qs(parsed.query)
+                session_id = q.get("session_id", [""])[0]
+                student_id = q.get("student_id", [""])[0]
+                stats = get_student_stats(conn, session_id, student_id)
+                self._json(
+                    200,
+                    {
+                        "session_id": session_id,
+                        "student_id": student_id,
+                        **stats,
+                    },
+                )
+                return
+
             if parsed.path.startswith("/api/students/") and parsed.path.endswith("/stats"):
                 parts = [p for p in parsed.path.split("/") if p]
                 if len(parts) != 4:
@@ -189,7 +240,38 @@ class Handler(BaseHTTPRequestHandler):
                 event_to_store = dict(body)
                 event_to_store["server_timestamp"] = utc_now_iso()
                 EVENT_STORE.append_event(event_to_store)
+
+                conn.execute(
+                    """
+                    INSERT INTO events(event_id, session_id, user_id, student_id, event_name, metadata, timestamp)
+                    VALUES(?,?,?,?,?,?,?)
+                    """,
+                    (
+                        event_to_store["event_id"],
+                        event_to_store["session_id"],
+                        event_to_store.get("user_id"),
+                        event_to_store["student_id"],
+                        event_to_store["event_name"],
+                        json.dumps(event_to_store.get("metadata") or {}),
+                        event_to_store["timestamp"],
+                    ),
+                )
+                conn.commit()
                 self._json(202, {"ok": True, "event_id": event_to_store["event_id"]})
+                return
+
+            if self.path == "/api/link-session":
+                session_id = body.get("session_id")
+                user_id = body.get("user_id")
+                if not session_id or not user_id:
+                    self._json(400, {"error": "session_id and user_id are required"})
+                    return
+                updated = conn.execute(
+                    "UPDATE events SET user_id=? WHERE session_id=? AND user_id IS NULL",
+                    (user_id, session_id),
+                ).rowcount
+                conn.commit()
+                self._json(200, {"ok": True, "linked_events": updated, "session_id": session_id, "user_id": user_id})
                 return
 
             if self.path == "/api/quiz-results":
