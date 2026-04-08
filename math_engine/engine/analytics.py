@@ -3,10 +3,14 @@ from __future__ import annotations
 from collections import defaultdict
 from copy import deepcopy
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, MutableMapping, Optional
+from hashlib import sha256
+from typing import Any, Dict, Iterable, List, MutableMapping, Optional, Set
 
 FUNNEL_STAGES = ("start", "complete", "upgrade", "convert")
 EVENT_STORE: List[Dict[str, Any]] = []
+# Fast indexes to improve reliability guarantees for duplicate prevention and session linkage.
+_EVENT_IDS: Set[str] = set()
+_SESSION_STUDENT_INDEX: Dict[str, str] = {}
 
 
 def _parse_timestamp(value: Any) -> datetime:
@@ -23,12 +27,23 @@ def _parse_timestamp(value: Any) -> datetime:
     raise ValueError("timestamp must be an ISO-8601 string or datetime object")
 
 
+def _normalize_identifier(value: Any, field_name: str) -> str:
+    normalized = str(value).strip().lower()
+    if not normalized:
+        raise ValueError(f"{field_name} must be a non-empty string")
+    return normalized
+
+
+def _event_fingerprint(session_id: str, student_id: str, event_name: str, timestamp: datetime) -> str:
+    # Rounds to seconds so caller-side retries with identical payloads remain idempotent.
+    rounded_ts = timestamp.replace(microsecond=0).isoformat()
+    raw = f"{session_id}|{student_id}|{event_name}|{rounded_ts}"
+    return sha256(raw.encode("utf-8")).hexdigest()[:24]
+
+
 def _normalize_event(event: MutableMapping[str, Any]) -> Dict[str, Any]:
     if "session_id" not in event or "event" not in event:
         raise ValueError("event must include 'session_id' and 'event'")
-
-    timestamp = event.get("timestamp")
-    parsed_timestamp = _parse_timestamp(timestamp) if timestamp else datetime.now(timezone.utc)
 
     metadata = event.get("metadata")
     if metadata is None:
@@ -36,24 +51,86 @@ def _normalize_event(event: MutableMapping[str, Any]) -> Dict[str, Any]:
     if not isinstance(metadata, dict):
         raise ValueError("metadata must be a dictionary")
 
-    return {
-        "session_id": str(event["session_id"]),
-        "event": str(event["event"]).strip().lower(),
+    student_id_value = event.get("student_id")
+    if student_id_value is None:
+        student_id_value = metadata.get("student_id")
+    if student_id_value is None:
+        raise ValueError("event must include 'student_id' (top-level or metadata)")
+
+    timestamp = event.get("timestamp")
+    parsed_timestamp = _parse_timestamp(timestamp) if timestamp else datetime.now(timezone.utc)
+
+    session_id = _normalize_identifier(event["session_id"], "session_id")
+    student_id = _normalize_identifier(student_id_value, "student_id")
+    event_name = _normalize_identifier(event["event"], "event")
+
+    event_id = event.get("event_id") or _event_fingerprint(
+        session_id=session_id,
+        student_id=student_id,
+        event_name=event_name,
+        timestamp=parsed_timestamp,
+    )
+
+    normalized = {
+        "event_id": str(event_id),
+        "session_id": session_id,
+        "student_id": student_id,
+        "event": event_name,
         "timestamp": parsed_timestamp,
         "metadata": deepcopy(metadata),
     }
+    normalized["metadata"].setdefault("student_id", student_id)
+    return normalized
+
+
+def _validate_session_student_link(session_id: str, student_id: str) -> None:
+    previous_student = _SESSION_STUDENT_INDEX.get(session_id)
+    if previous_student is not None and previous_student != student_id:
+        raise ValueError(
+            "session_id is already linked to a different student_id "
+            f"({session_id}: {previous_student} != {student_id})"
+        )
 
 
 def track_event(event: MutableMapping[str, Any]) -> Dict[str, Any]:
-    """Store and return a normalized analytics event."""
+    """Store and return a normalized analytics event with idempotent dedupe."""
     normalized = _normalize_event(event)
-    EVENT_STORE.append(normalized)
-    return deepcopy(normalized)
+    _validate_session_student_link(normalized["session_id"], normalized["student_id"])
+
+    was_duplicate = normalized["event_id"] in _EVENT_IDS
+    if not was_duplicate:
+        EVENT_STORE.append(normalized)
+        _EVENT_IDS.add(normalized["event_id"])
+        _SESSION_STUDENT_INDEX[normalized["session_id"]] = normalized["student_id"]
+
+    out = deepcopy(normalized)
+    out["ingested"] = not was_duplicate
+    out["duplicate"] = was_duplicate
+    return out
 
 
 def compute_funnel(events: Iterable[MutableMapping[str, Any]]) -> Dict[str, Any]:
     """Compute top-line funnel rates and stage counts by unique session."""
-    normalized_events = [_normalize_event(event) for event in events]
+    normalized_events: List[Dict[str, Any]] = []
+    invalid_events: List[Dict[str, Any]] = []
+    seen_event_ids: Set[str] = set()
+    session_student_index: Dict[str, str] = {}
+
+    for raw_event in events:
+        try:
+            event = _normalize_event(raw_event)
+            if event["event_id"] in seen_event_ids:
+                continue
+            seen_event_ids.add(event["event_id"])
+
+            existing_student = session_student_index.get(event["session_id"])
+            if existing_student and existing_student != event["student_id"]:
+                invalid_events.append({"reason": "session_student_mismatch", "event": event})
+                continue
+            session_student_index[event["session_id"]] = event["student_id"]
+            normalized_events.append(event)
+        except Exception as exc:  # malformed event should not break the whole batch
+            invalid_events.append({"reason": "invalid_event", "error": str(exc), "event": deepcopy(dict(raw_event))})
 
     sessions: Dict[str, set[str]] = defaultdict(set)
     for event in normalized_events:
@@ -75,6 +152,8 @@ def compute_funnel(events: Iterable[MutableMapping[str, Any]]) -> Dict[str, Any]
             "completed": completed,
             "upgraded": upgraded,
             "converted": converted,
+            "events_ingested": len(normalized_events),
+            "events_rejected": len(invalid_events),
         },
         "stage_counts": {
             "start": started,
@@ -86,6 +165,7 @@ def compute_funnel(events: Iterable[MutableMapping[str, Any]]) -> Dict[str, Any]
         "completion_rate": safe_rate(completed, started),
         "upgrade_rate": safe_rate(upgraded, completed),
         "conversion_rate": safe_rate(converted, started),
+        "invalid_events": invalid_events,
     }
 
 
@@ -188,17 +268,17 @@ def generate_daily_summary(events: Iterable[MutableMapping[str, Any]]) -> Dict[s
 
 
 EXAMPLE_EVENTS: List[Dict[str, Any]] = [
-    {"session_id": "s1", "event": "start", "timestamp": "2026-04-06T09:00:00Z", "metadata": {"device": "mobile", "year": 4}},
-    {"session_id": "s1", "event": "complete", "timestamp": "2026-04-06T09:08:00Z", "metadata": {"device": "mobile", "year": 4}},
-    {"session_id": "s2", "event": "start", "timestamp": "2026-04-06T10:00:00Z", "metadata": {"device": "desktop", "year": 5}},
-    {"session_id": "s3", "event": "start", "timestamp": "2026-04-07T08:20:00Z", "metadata": {"device": "mobile", "year": 4}},
-    {"session_id": "s3", "event": "complete", "timestamp": "2026-04-07T08:40:00Z", "metadata": {"device": "mobile", "year": 4}},
-    {"session_id": "s3", "event": "upgrade", "timestamp": "2026-04-07T08:42:00Z", "metadata": {"device": "mobile", "year": 4}},
-    {"session_id": "s4", "event": "start", "timestamp": "2026-04-07T09:15:00Z", "metadata": {"device": "desktop", "year": 6}},
-    {"session_id": "s5", "event": "start", "timestamp": "2026-04-07T10:00:00Z", "metadata": {"device": "tablet", "year": 5}},
-    {"session_id": "s5", "event": "complete", "timestamp": "2026-04-07T10:10:00Z", "metadata": {"device": "tablet", "year": 5}},
-    {"session_id": "s5", "event": "upgrade", "timestamp": "2026-04-07T10:15:00Z", "metadata": {"device": "tablet", "year": 5}},
-    {"session_id": "s5", "event": "convert", "timestamp": "2026-04-07T10:16:00Z", "metadata": {"device": "tablet", "year": 5}},
+    {"session_id": "s1", "student_id": "st-001", "event": "start", "timestamp": "2026-04-06T09:00:00Z", "metadata": {"device": "mobile", "year": 4}},
+    {"session_id": "s1", "student_id": "st-001", "event": "complete", "timestamp": "2026-04-06T09:08:00Z", "metadata": {"device": "mobile", "year": 4}},
+    {"session_id": "s2", "student_id": "st-002", "event": "start", "timestamp": "2026-04-06T10:00:00Z", "metadata": {"device": "desktop", "year": 5}},
+    {"session_id": "s3", "student_id": "st-003", "event": "start", "timestamp": "2026-04-07T08:20:00Z", "metadata": {"device": "mobile", "year": 4}},
+    {"session_id": "s3", "student_id": "st-003", "event": "complete", "timestamp": "2026-04-07T08:40:00Z", "metadata": {"device": "mobile", "year": 4}},
+    {"session_id": "s3", "student_id": "st-003", "event": "upgrade", "timestamp": "2026-04-07T08:42:00Z", "metadata": {"device": "mobile", "year": 4}},
+    {"session_id": "s4", "student_id": "st-004", "event": "start", "timestamp": "2026-04-07T09:15:00Z", "metadata": {"device": "desktop", "year": 6}},
+    {"session_id": "s5", "student_id": "st-005", "event": "start", "timestamp": "2026-04-07T10:00:00Z", "metadata": {"device": "tablet", "year": 5}},
+    {"session_id": "s5", "student_id": "st-005", "event": "complete", "timestamp": "2026-04-07T10:10:00Z", "metadata": {"device": "tablet", "year": 5}},
+    {"session_id": "s5", "student_id": "st-005", "event": "upgrade", "timestamp": "2026-04-07T10:15:00Z", "metadata": {"device": "tablet", "year": 5}},
+    {"session_id": "s5", "student_id": "st-005", "event": "convert", "timestamp": "2026-04-07T10:16:00Z", "metadata": {"device": "tablet", "year": 5}},
 ]
 
 
