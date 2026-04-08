@@ -231,6 +231,7 @@ class Handler(BaseHTTPRequestHandler):
         body = self._read_json()
         try:
             if self.path == "/api/events":
+                print("EVENT RECEIVED:", body, flush=True)
                 ok, errors = validate_event(body)
                 if not ok:
                     LOGGER.error("Invalid event rejected: %s", errors)
@@ -275,6 +276,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
             if self.path == "/api/quiz-results":
+                print("EVENT RECEIVED:", body, flush=True)
                 student_id = body.get("student_id")
                 score = body.get("score")
                 total = body.get("total")
@@ -310,7 +312,7 @@ class Handler(BaseHTTPRequestHandler):
                     (student_id,),
                 ).fetchone()
                 if not student_exists:
-                    self._json(404, {"error": "Student not found"})
+                    self._json(404, {"error": "Student not found", "student_id": student_id})
                     return
 
                 attempt_id = f"qat_{uuid.uuid4().hex[:12]}"
