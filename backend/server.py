@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
 import json
+import logging
 import os
 import sqlite3
 import uuid
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
 
+from event_schema import validate_event
+from event_store import build_event_store, utc_now_iso
+
 ROOT = os.path.dirname(__file__)
 DB_PATH = os.path.join(ROOT, "billing.db")
 SCHEMA_PATH = os.path.join(ROOT, "schema.sql")
 
 FREE_WORKSHEET_LIMIT = 3
+EVENT_STORE = build_event_store()
+LOGGER = logging.getLogger("event_api")
 
 
 def db_conn():
@@ -173,6 +179,19 @@ class Handler(BaseHTTPRequestHandler):
         conn = db_conn()
         body = self._read_json()
         try:
+            if self.path == "/api/events":
+                ok, errors = validate_event(body)
+                if not ok:
+                    LOGGER.error("Invalid event rejected: %s", errors)
+                    self._json(400, {"ok": False, "errors": errors})
+                    return
+
+                event_to_store = dict(body)
+                event_to_store["server_timestamp"] = utc_now_iso()
+                EVENT_STORE.append_event(event_to_store)
+                self._json(202, {"ok": True, "event_id": event_to_store["event_id"]})
+                return
+
             if self.path == "/api/quiz-results":
                 student_id = body.get("student_id")
                 score = body.get("score")
