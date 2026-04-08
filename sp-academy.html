@@ -225,22 +225,121 @@ react/cjs/react-jsx-runtime.production.js:
 <script>
 (function(){
   const BASE = (window.SP_CONFIG && window.SP_CONFIG.BILLING_API_BASE) || 'http://localhost:8787';
+  const MAX_DEBUG_LOGS = 5;
+  const debugLogStore = [];
+  let debugPanelVisible = false;
+  let debugPanelBody = null;
+
+  function renderDebugPanel(){
+    if(!debugPanelBody) return;
+    debugPanelBody.textContent = JSON.stringify(debugLogStore, null, 2);
+  }
+
+  function pushDebugLog(event, data){
+    debugLogStore.push({
+      ts: new Date().toISOString(),
+      event,
+      data
+    });
+    if(debugLogStore.length > MAX_DEBUG_LOGS){
+      debugLogStore.splice(0, debugLogStore.length - MAX_DEBUG_LOGS);
+    }
+    renderDebugPanel();
+  }
+
+  function mountDebugPanel(){
+    const panelRoot = document.createElement('div');
+    panelRoot.style.position = 'fixed';
+    panelRoot.style.left = '10px';
+    panelRoot.style.right = '10px';
+    panelRoot.style.bottom = '10px';
+    panelRoot.style.zIndex = '5000';
+    panelRoot.style.fontFamily = 'monospace';
+
+    const toggleButton = document.createElement('button');
+    toggleButton.type = 'button';
+    toggleButton.textContent = '🐛 Debug Logs';
+    toggleButton.style.background = '#1d4ed8';
+    toggleButton.style.color = '#fff';
+    toggleButton.style.border = 'none';
+    toggleButton.style.borderRadius = '10px';
+    toggleButton.style.padding = '8px 12px';
+    toggleButton.style.fontSize = '11px';
+    toggleButton.style.fontWeight = '700';
+    toggleButton.style.cursor = 'pointer';
+    toggleButton.style.boxShadow = '0 6px 20px rgba(0,0,0,0.4)';
+
+    const panel = document.createElement('div');
+    panel.style.display = 'none';
+    panel.style.marginTop = '8px';
+    panel.style.maxHeight = '35vh';
+    panel.style.overflow = 'auto';
+    panel.style.background = 'rgba(2,6,23,0.96)';
+    panel.style.border = '1px solid #334155';
+    panel.style.borderRadius = '10px';
+    panel.style.padding = '10px';
+
+    const panelTitle = document.createElement('div');
+    panelTitle.textContent = 'MOBILE DEBUG PANEL (last 5 logs)';
+    panelTitle.style.color = '#93c5fd';
+    panelTitle.style.fontSize = '10px';
+    panelTitle.style.letterSpacing = '1px';
+    panelTitle.style.marginBottom = '8px';
+
+    debugPanelBody = document.createElement('pre');
+    debugPanelBody.style.margin = '0';
+    debugPanelBody.style.color = '#e2e8f0';
+    debugPanelBody.style.fontSize = '10px';
+    debugPanelBody.style.whiteSpace = 'pre-wrap';
+    debugPanelBody.style.wordBreak = 'break-word';
+
+    panel.appendChild(panelTitle);
+    panel.appendChild(debugPanelBody);
+
+    toggleButton.onclick = function(){
+      debugPanelVisible = !debugPanelVisible;
+      panel.style.display = debugPanelVisible ? 'block' : 'none';
+    };
+
+    panelRoot.appendChild(toggleButton);
+    panelRoot.appendChild(panel);
+    document.body.appendChild(panelRoot);
+    renderDebugPanel();
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', mountDebugPanel);
+  } else {
+    mountDebugPanel();
+  }
+
+  window.SP_DEBUG = window.SP_DEBUG || {};
+  window.SP_DEBUG.pushLog = pushDebugLog;
+  window.SP_DEBUG.getLogs = function(){ return debugLogStore.slice(); };
 
   window.SP_API = window.SP_API || {};
   window.SP_API.submitQuizResult = async function submitQuizResult(payload){
     const quizPayload = payload || {};
+    pushDebugLog('QUIZ COMPLETE', {
+      student_id: quizPayload.student_id,
+      xp: quizPayload.xp
+    });
     console.log("QUIZ COMPLETE TRIGGERED", {
       student_id: quizPayload.student_id,
       score: quizPayload.score,
       total: quizPayload.total,
       xp: quizPayload.xp
     });
+
+    pushDebugLog('SENDING', quizPayload);
     const response = await fetch(`${BASE}/api/quiz-results`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(quizPayload)
     });
     const json = await response.json();
+    pushDebugLog('RESPONSE', json);
+
     console.log("QUIZ RESULTS RESPONSE", {
       endpoint: "/api/quiz-results",
       status: response.status,
@@ -264,17 +363,21 @@ react/cjs/react-jsx-runtime.production.js:
   window.SP_API.fetchDashboardStats = async function fetchDashboardStats(studentId){
     if(!studentId) throw new Error('studentId is required');
     const sessionId = window.SP_API.getSessionId();
+    pushDebugLog('FETCHING STATS', { student_id: studentId });
     console.log("FETCHING STATS", {session_id: sessionId, student_id: studentId});
+
+    const requestInfo = {
+      endpoint: `/api/students/${studentId}/stats`,
+      student_id: studentId,
+      session_id: sessionId
+    };
+    pushDebugLog('SENDING', requestInfo);
+
     const response = await fetch(`${BASE}/api/students/${encodeURIComponent(studentId)}/stats`);
     const json = await response.json();
-    console.log("DASHBOARD STATS RESPONSE", {
-      endpoint: `/api/students/${studentId}/stats`,
-      status: response.status,
-      ok: response.ok,
-      response: json
-    });
-    if(!response.ok) throw json;
-    return {
+    pushDebugLog('RESPONSE', json);
+
+    const normalized = {
       session_id: sessionId,
       student_id: studentId,
       total_xp: json?.stats?.total_xp || 0,
@@ -282,6 +385,16 @@ react/cjs/react-jsx-runtime.production.js:
       correct_answers: json?.stats?.total_correct || 0,
       accuracy: json?.stats?.accuracy_percent ? Number(json.stats.accuracy_percent) / 100 : 0
     };
+    pushDebugLog('STATS', normalized);
+
+    console.log("DASHBOARD STATS RESPONSE", {
+      endpoint: `/api/students/${studentId}/stats`,
+      status: response.status,
+      ok: response.ok,
+      response: json
+    });
+    if(!response.ok) throw json;
+    return normalized;
   };
 })();
 </script>
