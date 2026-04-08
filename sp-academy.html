@@ -228,12 +228,26 @@ react/cjs/react-jsx-runtime.production.js:
 
   window.SP_API = window.SP_API || {};
   window.SP_API.submitQuizResult = async function submitQuizResult(payload){
+    const quizPayload = payload || {};
+    console.log("QUIZ COMPLETE TRIGGERED", {
+      student_id: quizPayload.student_id,
+      score: quizPayload.score,
+      total: quizPayload.total,
+      xp: quizPayload.xp
+    });
     const response = await fetch(`${BASE}/api/quiz-results`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(payload || {})
+      body: JSON.stringify(quizPayload)
     });
     const json = await response.json();
+    console.log("QUIZ RESULTS RESPONSE", {
+      endpoint: "/api/quiz-results",
+      status: response.status,
+      ok: response.ok,
+      request: quizPayload,
+      response: json
+    });
     if(!response.ok) throw json;
     return json;
   };
@@ -250,10 +264,24 @@ react/cjs/react-jsx-runtime.production.js:
   window.SP_API.fetchDashboardStats = async function fetchDashboardStats(studentId){
     if(!studentId) throw new Error('studentId is required');
     const sessionId = window.SP_API.getSessionId();
-    const response = await fetch(`${BASE}/api/student-stats?session_id=${encodeURIComponent(sessionId)}&student_id=${encodeURIComponent(studentId)}`);
+    console.log("FETCHING STATS", {session_id: sessionId, student_id: studentId});
+    const response = await fetch(`${BASE}/api/students/${encodeURIComponent(studentId)}/stats`);
     const json = await response.json();
+    console.log("DASHBOARD STATS RESPONSE", {
+      endpoint: `/api/students/${studentId}/stats`,
+      status: response.status,
+      ok: response.ok,
+      response: json
+    });
     if(!response.ok) throw json;
-    return json;
+    return {
+      session_id: sessionId,
+      student_id: studentId,
+      total_xp: json?.stats?.total_xp || 0,
+      total_questions: json?.stats?.total_questions || 0,
+      correct_answers: json?.stats?.total_correct || 0,
+      accuracy: json?.stats?.accuracy_percent ? Number(json.stats.accuracy_percent) / 100 : 0
+    };
   };
 })();
 </script>
