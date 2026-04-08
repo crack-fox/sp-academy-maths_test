@@ -74,3 +74,23 @@ CREATE TABLE IF NOT EXISTS entitlements (
   FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE SET NULL,
   FOREIGN KEY (worksheet_id) REFERENCES worksheets(id)
 );
+
+CREATE TABLE IF NOT EXISTS quiz_attempts (
+  id TEXT PRIMARY KEY,
+  student_id TEXT NOT NULL,
+  score INTEGER NOT NULL,
+  total INTEGER NOT NULL,
+  xp INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS student_stats (
+  student_id TEXT PRIMARY KEY,
+  quizzes_completed INTEGER NOT NULL DEFAULT 0,
+  total_correct INTEGER NOT NULL DEFAULT 0,
+  total_questions INTEGER NOT NULL DEFAULT 0,
+  total_xp INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+);
