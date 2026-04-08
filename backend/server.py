@@ -80,6 +80,68 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         conn = db_conn()
         try:
+            if parsed.path.startswith("/api/students/") and parsed.path.endswith("/stats"):
+                parts = [p for p in parsed.path.split("/") if p]
+                if len(parts) != 4:
+                    self._json(404, {"error": "Not found"})
+                    return
+                student_id = parts[2]
+
+                student = conn.execute(
+                    "SELECT id, first_name, grade FROM students WHERE id=?",
+                    (student_id,),
+                ).fetchone()
+                if not student:
+                    self._json(404, {"error": "Student not found"})
+                    return
+
+                stats = conn.execute(
+                    """
+                    SELECT quizzes_completed,total_correct,total_questions,total_xp,updated_at
+                    FROM student_stats
+                    WHERE student_id=?
+                    """,
+                    (student_id,),
+                ).fetchone()
+                if not stats:
+                    stats = {
+                        "quizzes_completed": 0,
+                        "total_correct": 0,
+                        "total_questions": 0,
+                        "total_xp": 0,
+                        "updated_at": None,
+                    }
+                else:
+                    stats = dict(stats)
+
+                attempts = conn.execute(
+                    """
+                    SELECT id,score,total,xp,created_at
+                    FROM quiz_attempts
+                    WHERE student_id=?
+                    ORDER BY created_at DESC
+                    LIMIT 20
+                    """,
+                    (student_id,),
+                ).fetchall()
+                accuracy = (
+                    round((stats["total_correct"] / stats["total_questions"]) * 100, 2)
+                    if stats["total_questions"]
+                    else 0
+                )
+                self._json(
+                    200,
+                    {
+                        "student": dict(student),
+                        "stats": {
+                            **stats,
+                            "accuracy_percent": accuracy,
+                        },
+                        "recentAttempts": [dict(r) for r in attempts],
+                    },
+                )
+                return
+
             if parsed.path == "/api/worksheets":
                 rows = conn.execute(
                     "SELECT id,title,strand,level,price_cents FROM worksheets WHERE is_active=1 ORDER BY id"
@@ -111,6 +173,90 @@ class Handler(BaseHTTPRequestHandler):
         conn = db_conn()
         body = self._read_json()
         try:
+            if self.path == "/api/quiz-results":
+                student_id = body.get("student_id")
+                score = body.get("score")
+                total = body.get("total")
+                xp = body.get("xp")
+
+                if not student_id:
+                    self._json(400, {"error": "student_id is required"})
+                    return
+                if score is None or total is None or xp is None:
+                    self._json(400, {"error": "score, total and xp are required"})
+                    return
+
+                try:
+                    score = int(score)
+                    total = int(total)
+                    xp = int(xp)
+                except (TypeError, ValueError):
+                    self._json(400, {"error": "score, total and xp must be integers"})
+                    return
+
+                if total <= 0:
+                    self._json(400, {"error": "total must be greater than 0"})
+                    return
+                if score < 0 or score > total:
+                    self._json(400, {"error": "score must be between 0 and total"})
+                    return
+                if xp < 0:
+                    self._json(400, {"error": "xp must be non-negative"})
+                    return
+
+                student_exists = conn.execute(
+                    "SELECT 1 FROM students WHERE id=?",
+                    (student_id,),
+                ).fetchone()
+                if not student_exists:
+                    self._json(404, {"error": "Student not found"})
+                    return
+
+                attempt_id = f"qat_{uuid.uuid4().hex[:12]}"
+                conn.execute(
+                    """
+                    INSERT INTO quiz_attempts(id,student_id,score,total,xp)
+                    VALUES(?,?,?,?,?)
+                    """,
+                    (attempt_id, student_id, score, total, xp),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO student_stats(student_id,quizzes_completed,total_correct,total_questions,total_xp,updated_at)
+                    VALUES(?,?,?,?,?,datetime('now'))
+                    ON CONFLICT(student_id) DO UPDATE SET
+                      quizzes_completed = quizzes_completed + 1,
+                      total_correct = total_correct + excluded.total_correct,
+                      total_questions = total_questions + excluded.total_questions,
+                      total_xp = total_xp + excluded.total_xp,
+                      updated_at = datetime('now')
+                    """,
+                    (student_id, 1, score, total, xp),
+                )
+                conn.commit()
+
+                stats = conn.execute(
+                    """
+                    SELECT quizzes_completed,total_correct,total_questions,total_xp,updated_at
+                    FROM student_stats
+                    WHERE student_id=?
+                    """,
+                    (student_id,),
+                ).fetchone()
+                self._json(
+                    201,
+                    {
+                        "ok": True,
+                        "attemptId": attempt_id,
+                        "student_id": student_id,
+                        "score": score,
+                        "total": total,
+                        "xp": xp,
+                        "stats": dict(stats),
+                    },
+                )
+                return
+
             if self.path == "/billing/quote":
                 account_id = body.get("accountId", "acct_demo")
                 student_id = body.get("studentId", "stu_demo")
