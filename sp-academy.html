@@ -238,9 +238,19 @@ react/cjs/react-jsx-runtime.production.js:
     return json;
   };
 
+  window.SP_API.getSessionId = function getSessionId(){
+    const key = 'session_id';
+    const existing = localStorage.getItem(key);
+    if(existing) return existing;
+    const created = crypto.randomUUID();
+    localStorage.setItem(key, created);
+    return created;
+  };
+
   window.SP_API.fetchDashboardStats = async function fetchDashboardStats(studentId){
     if(!studentId) throw new Error('studentId is required');
-    const response = await fetch(`${BASE}/api/students/${encodeURIComponent(studentId)}/stats`);
+    const sessionId = window.SP_API.getSessionId();
+    const response = await fetch(`${BASE}/api/student-stats?session_id=${encodeURIComponent(sessionId)}&student_id=${encodeURIComponent(studentId)}`);
     const json = await response.json();
     if(!response.ok) throw json;
     return json;

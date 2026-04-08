@@ -62,3 +62,32 @@ def segment_funnel(events: Iterable[Dict[str, Any]], key: str) -> Dict[str, Dict
         segments[str(segment_value)].append(event)
 
     return {segment: compute_funnel(segment_events) for segment, segment_events in segments.items()}
+
+
+def get_student_stats(events: Iterable[Dict[str, Any]], session_id: str, student_id: str) -> Dict[str, Any]:
+    filtered = [
+        e
+        for e in events
+        if e.get("session_id") == session_id and e.get("student_id") == student_id
+    ]
+
+    total_xp = 0.0
+    total_questions = 0.0
+    correct_answers = 0.0
+
+    for event in filtered:
+        if event.get("event_name") not in {"question_answered", "complete_assessment"}:
+            continue
+        meta = event.get("metadata", {})
+        total_xp += float(meta.get("xp", 0) or 0)
+        total_questions += float(meta.get("total", 0) or 0)
+        correct_answers += float(meta.get("score", 0) or 0)
+
+    q = int(total_questions)
+    c = int(correct_answers)
+    return {
+        "total_xp": round(total_xp, 2),
+        "total_questions": q,
+        "correct_answers": c,
+        "accuracy": _safe_rate(c, q),
+    }
